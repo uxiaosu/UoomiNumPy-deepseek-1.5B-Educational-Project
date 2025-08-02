@@ -13,20 +13,41 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent / "src"))
 
 from api import load_model
+from optimization_config import OptimizationConfig, apply_optimization, get_memory_optimization_tips, get_speed_optimization_tips
 
 
 class ChatSession:
     """Interactive chat session with DeepSeek model."""
     
-    def __init__(self, model_dir: str):
+    def __init__(self, model_dir: str, optimization_level: str = 'basic'):
         """Initialize chat session.
         
         Args:
             model_dir: Path to the model directory
+            optimization_level: Optimization level ('basic', 'high_efficiency', 'quality', 'debug')
         """
         print("🤖 Loading DeepSeek model...")
         self.model = load_model(model_dir)
         self.conversation_history = []
+        
+        # 设置默认优化参数
+        config_map = {
+            'basic': OptimizationConfig.BASIC_OPTIMIZATION,
+            'high_efficiency': OptimizationConfig.HIGH_EFFICIENCY,
+            'quality': OptimizationConfig.QUALITY_OPTIMIZATION,
+            'debug': OptimizationConfig.DEBUG_CONFIG
+        }
+        
+        config = config_map.get(optimization_level, OptimizationConfig.BASIC_OPTIMIZATION)
+        self.default_max_tokens = config['max_new_tokens']
+        self.default_temperature = config['temperature']
+        self.default_top_p = config['top_p']
+        self.default_top_k = config['top_k']
+        self.default_repetition_penalty = config['repetition_penalty']
+        self.verbose = config['verbose']
+        
+        print(f"🔧 已应用 {optimization_level} 优化配置")
+        print(f"📊 参数: max_tokens={self.default_max_tokens}, temp={self.default_temperature}, top_p={self.default_top_p}")
         print("✅ Model loaded successfully!")
         print("💬 Chat session started. Type 'quit', 'exit', or 'bye' to end.")
         print("🔧 Type 'help' for available commands.")
@@ -44,17 +65,23 @@ class ChatSession:
         })
         print(f"🔧 System message added: {content}")
     
-    def chat_turn(self, user_input: str, max_tokens: int = 100, temperature: float = 0.8) -> str:
+    def chat_turn(self, user_input: str, max_tokens: int = None, temperature: float = None) -> str:
         """Process one chat turn.
         
         Args:
             user_input: User's message
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate (uses default if None)
+            temperature: Sampling temperature (uses default if None)
             
         Returns:
             Assistant's response
         """
+        # Use default values if not specified
+        if max_tokens is None:
+            max_tokens = self.default_max_tokens
+        if temperature is None:
+            temperature = self.default_temperature
+            
         # Add user message to history
         self.conversation_history.append({
             "role": "user",
@@ -67,8 +94,9 @@ class ChatSession:
                 messages=self.conversation_history,
                 max_new_tokens=max_tokens,
                 temperature=temperature,
-                top_p=0.9,
-                verbose=False
+                top_p=self.default_top_p,
+                top_k=self.default_top_k,
+                verbose=self.verbose
             )
             
             # Add assistant response to history
@@ -112,6 +140,9 @@ class ChatSession:
   temp <value>  - Set temperature (e.g., 'temp 0.7')
   tokens <num>  - Set max tokens (e.g., 'tokens 150')
   info          - Show model information
+  optimize <level> - Change optimization level (basic/high_efficiency/quality/debug)
+  status        - Show current optimization settings
+  tips          - Show optimization tips
   quit/exit/bye - End chat session
 
 💡 Tips:
@@ -120,6 +151,50 @@ class ChatSession:
   - Adjust max tokens based on desired response length
         """
         print(help_text)
+    
+    def change_optimization(self, level: str):
+        """Change optimization level.
+        
+        Args:
+            level: New optimization level
+        """
+        config_map = {
+            'basic': OptimizationConfig.BASIC_OPTIMIZATION,
+            'high_efficiency': OptimizationConfig.HIGH_EFFICIENCY,
+            'quality': OptimizationConfig.QUALITY_OPTIMIZATION,
+            'debug': OptimizationConfig.DEBUG_CONFIG
+        }
+        
+        if level not in config_map:
+            print(f"❌ 未知的优化级别: {level}")
+            print("可用级别: basic, high_efficiency, quality, debug")
+            return
+        
+        config = config_map[level]
+        self.default_max_tokens = config['max_new_tokens']
+        self.default_temperature = config['temperature']
+        self.default_top_p = config['top_p']
+        self.default_top_k = config['top_k']
+        self.default_repetition_penalty = config['repetition_penalty']
+        self.verbose = config['verbose']
+        
+        print(f"✅ 已切换到 {level} 优化配置")
+        print(f"📊 新参数: max_tokens={self.default_max_tokens}, temp={self.default_temperature}, top_p={self.default_top_p}")
+    
+    def show_status(self):
+        """Show current optimization settings."""
+        print("\n📊 当前优化设置:")
+        print(f"  Max Tokens: {self.default_max_tokens}")
+        print(f"  Temperature: {self.default_temperature}")
+        print(f"  Top-P: {self.default_top_p}")
+        print(f"  Top-K: {self.default_top_k}")
+        print(f"  Repetition Penalty: {self.default_repetition_penalty}")
+        print(f"  Verbose: {self.verbose}")
+    
+    def show_optimization_tips(self):
+        """Show optimization tips."""
+        print("\n" + get_memory_optimization_tips())
+        print("\n" + get_speed_optimization_tips())
     
     def show_model_info(self):
         """Show model information."""
@@ -133,9 +208,9 @@ class ChatSession:
     
     def run(self):
         """Run the interactive chat session."""
-        # Default settings
-        temperature = 0.8
-        max_tokens = 100
+        # Use optimization defaults instead of hardcoded values
+        temperature = self.default_temperature
+        max_tokens = self.default_max_tokens
         
         while True:
             try:
@@ -164,6 +239,22 @@ class ChatSession:
                 
                 elif user_input.lower() == 'info':
                     self.show_model_info()
+                    continue
+                
+                elif user_input.lower() == 'status':
+                    self.show_status()
+                    continue
+                
+                elif user_input.lower() == 'tips':
+                    self.show_optimization_tips()
+                    continue
+                
+                elif user_input.lower().startswith('optimize '):
+                    level = user_input[9:].strip()
+                    if level:
+                        self.change_optimization(level)
+                    else:
+                        print("❌ Please provide an optimization level.")
                     continue
                 
                 elif user_input.lower().startswith('system '):
@@ -289,8 +380,15 @@ def main():
     print("💬 UoomiNumPy deepseek Model - Chat Examples")
     print("=" * 60)
     
-    # Model directory (update this path to your model location)
-    model_dir = "../../DeepSeek-R1-Distill-Qwen-1.5B"
+    # Check command line arguments
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: python chat_example.py <model_directory> [optimization_level]")
+        print("Example: python chat_example.py ../DeepSeek-R1-Distill-Qwen-1.5B basic")
+        print("Optimization levels: basic, high_efficiency, quality, debug")
+        sys.exit(1)
+    
+    model_dir = sys.argv[1]
+    optimization_level = sys.argv[2] if len(sys.argv) == 3 else 'basic'
     
     print("Choose an option:")
     print("1. Interactive Chat Session")
@@ -302,7 +400,7 @@ def main():
         
         if choice == "1":
             # Interactive chat
-            chat = ChatSession(model_dir)
+            chat = ChatSession(model_dir, optimization_level)
             chat.run()
             
         elif choice == "2":
@@ -314,7 +412,7 @@ def main():
             preset_conversations()
             print("\n" + "=" * 60)
             print("Starting interactive chat session...")
-            chat = ChatSession(model_dir)
+            chat = ChatSession(model_dir, optimization_level)
             chat.run()
             
         else:
