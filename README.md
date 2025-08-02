@@ -1,3 +1,4 @@
+[![PaiPi.png](https://i.postimg.cc/SKsDZN1Q/PaiPi.png)](https://postimg.cc/PCgWJhk0)
 # UoomiNumPy-deepseek-1.5B-Educational-Project
 Quickly dissect the technical underpinnings of the DeepSeek-R1-1.5B large model with UoomiNumPy, then run it directly on CPU without any frameworks for instant testing.
 
